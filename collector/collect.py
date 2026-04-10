@@ -11,13 +11,14 @@ Usage:
 """
 
 import argparse
+import json
 import logging
 import math
 import os
 import sys
 from datetime import datetime, timedelta, timezone
 from urllib.error import URLError
-from urllib.request import urlopen
+from urllib.request import urlopen, Request
 
 import psycopg2
 from psycopg2.extras import execute_values
@@ -180,6 +181,51 @@ def run_dataset(conn, dataset_key, backfill_days, dry_run):
     log.info("%s: ingested %d rows total", dataset_key, total)
 
 
+def check_gaps(conn):
+    """
+    Check each dataset for staleness. Alert via Discord webhook if any dataset
+    has data but hasn't updated in >2 hours (indicating a collection failure,
+    not a fresh backfill). Silently skips datasets still in initial backfill
+    (last_time older than 7 days) and datasets with no data yet.
+    """
+    webhook = os.environ.get("HFR_DISCORD_WEBHOOK")
+    now = datetime.now(timezone.utc)
+    stale = []
+
+    with conn.cursor() as cur:
+        for dataset in DATASETS:
+            cur.execute(
+                "SELECT MAX(last_time) FROM hfr_ingest_log WHERE dataset = %s",
+                (dataset,)
+            )
+            row = cur.fetchone()
+            if not row or not row[0]:
+                continue
+            last = row[0]
+            age_hours = (now - last).total_seconds() / 3600
+            # Only flag as stale if data is recent enough to not be mid-backfill
+            if age_hours > 2 and age_hours < 7 * 24:
+                stale.append((dataset, last, age_hours))
+                log.warning("GAP: %s last updated %s (%.1fh ago)", dataset, last, age_hours)
+
+    if stale and webhook:
+        lines = [f"⚠️ **HF Radar collection gap detected**"]
+        for dataset, last, age in stale:
+            lines.append(f"• `{dataset}` — last data {last.strftime('%Y-%m-%d %H:%M UTC')} ({age:.1f}h ago)")
+        _discord(webhook, "\n".join(lines))
+    elif not stale:
+        log.info("gap check: all datasets current")
+
+
+def _discord(webhook_url, message):
+    try:
+        data = json.dumps({"content": message}).encode()
+        req = Request(webhook_url, data=data, headers={"Content-Type": "application/json"})
+        urlopen(req, timeout=10)
+    except Exception as e:
+        log.warning("Discord alert failed: %s", e)
+
+
 def main():
     parser = argparse.ArgumentParser(description="HF Radar data collector")
     parser.add_argument("--dataset", choices=list(DATASETS) + ["all"], default="all")
@@ -187,12 +233,18 @@ def main():
                         help="Days to backfill on first run (default: 90)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Fetch data but don't write to database")
+    parser.add_argument("--skip-gap-check", action="store_true",
+                        help="Skip staleness check (use during backfill)")
     args = parser.parse_args()
 
     conn = get_db()
     targets = list(DATASETS) if args.dataset == "all" else [args.dataset]
     for ds in targets:
         run_dataset(conn, ds, args.backfill_days, args.dry_run)
+
+    if not args.dry_run and not args.skip_gap_check and args.dataset == "all":
+        check_gaps(conn)
+
     conn.close()
 
 
