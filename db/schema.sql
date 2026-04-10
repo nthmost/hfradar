@@ -69,7 +69,13 @@ CREATE TABLE hfr_ingest_log (
     PRIMARY KEY (dataset, last_time)
 );
 
--- Compression: older data compresses well; keep recent hot for fast writes.
+-- Columnstore (compression) policies: older chunks stored in compressed columnar format.
+-- TimescaleDB 2.14+ uses add_columnstore_policy; enable per-table first.
+ALTER TABLE hfr_uswc_6km  SET (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
+ALTER TABLE hfr_uswc_2km  SET (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
+ALTER TABLE hfr_uswc_1km  SET (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
+ALTER TABLE hfr_uswc_500m SET (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
+
 SELECT add_compression_policy('hfr_uswc_6km',  INTERVAL '90 days');
 SELECT add_compression_policy('hfr_uswc_2km',  INTERVAL '90 days');
 SELECT add_compression_policy('hfr_uswc_1km',  INTERVAL '30 days');

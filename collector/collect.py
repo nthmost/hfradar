@@ -56,11 +56,11 @@ def fetch_chunk(erddap_id, t_start, t_end):
     Fetch one time chunk from ERDDAP. Returns list of (time, lat, lon, u, v) tuples.
     Only non-NaN rows included.
     """
+    t0 = t_start.strftime('%Y-%m-%dT%H:%M:%SZ')
+    t1 = t_end.strftime('%Y-%m-%dT%H:%M:%SZ')
     query = (
-        f"water_u[({t_start.strftime('%Y-%m-%dT%H:%M:%SZ')}):1:({t_end.strftime('%Y-%m-%dT%H:%M:%SZ')})]"
-        f"[][][]"
-        f",water_v[({t_start.strftime('%Y-%m-%dT%H:%M:%SZ')}):1:({t_end.strftime('%Y-%m-%dT%H:%M:%SZ')})]"
-        f"[][][]"
+        f"water_u[({t0}):1:({t1})][][]"
+        f",water_v[({t0}):1:({t1})][][]"
     )
     url = f"{ERDDAP_BASE}/{erddap_id}.csv?{query}"
     log.debug("Fetching %s", url)
