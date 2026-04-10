@@ -12,7 +12,7 @@ Endpoints:
 
 import math
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import psycopg2
@@ -129,8 +129,8 @@ def currents_point(
                     ORDER BY geom <-> ST_SetSRID(ST_MakePoint(%s, %s), 4326)
                     LIMIT 1
                     """,
-                    (t - __import__('datetime').timedelta(hours=1),
-                     t + __import__('datetime').timedelta(hours=1),
+                    (t - timedelta(hours=1),
+                     t + timedelta(hours=1),
                      lon, lat),
                 )
                 row = cur.fetchone()
@@ -222,8 +222,8 @@ def currents_area(
                   AND lon BETWEEN %s AND %s
                 LIMIT %s
                 """,
-                (t - __import__('datetime').timedelta(minutes=30),
-                 t + __import__('datetime').timedelta(minutes=30),
+                (t - timedelta(minutes=30),
+                 t + timedelta(minutes=30),
                  south, north, west, east, MAX_AREA_POINTS),
             )
             rows = cur.fetchall()

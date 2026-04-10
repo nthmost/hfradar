@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HF Radar — US West Coast Surface Currents</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body { background: #0d1117; font-family: 'Courier New', monospace; color: #c9d1d9; }
+
+  #map { width: 100vw; height: 100vh; }
+
+  /* Leaflet dark tile filter */
+  .leaflet-tile { filter: brightness(0.6) saturate(0.4) hue-rotate(180deg); }
+
+  #title {
+    position: fixed; top: 16px; left: 16px; z-index: 1000;
+    font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: #58a6ff; text-shadow: 0 0 8px rgba(88,166,255,0.5);
+    pointer-events: none;
+  }
+  #title span { color: #8b949e; font-size: 11px; display: block; margin-top: 2px; }
+
+  #controls {
+    position: fixed; bottom: 24px; left: 16px; z-index: 1000;
+    background: rgba(13,17,23,0.88); border: 1px solid #30363d;
+    border-radius: 6px; padding: 12px 14px; width: 300px;
+    backdrop-filter: blur(4px);
+  }
+
+  #controls label {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em;
+    color: #8b949e; display: block; margin-bottom: 6px;
+  }
+
+  #time-display {
+    font-size: 12px; color: #e6edf3; margin-bottom: 8px;
+  }
+
+  #time-slider {
+    width: 100%; accent-color: #58a6ff; margin-bottom: 12px; cursor: pointer;
+  }
+
+  #res-buttons { display: flex; gap: 6px; margin-bottom: 12px; }
+  .res-btn {
+    flex: 1; background: #161b22; border: 1px solid #30363d;
+    color: #8b949e; font-family: inherit; font-size: 11px;
+    padding: 4px 0; border-radius: 4px; cursor: pointer;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    transition: all 0.15s;
+  }
+  .res-btn:hover { border-color: #58a6ff; color: #58a6ff; }
+  .res-btn.active { background: #0d419d; border-color: #58a6ff; color: #58a6ff; }
+  .res-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  #status-line {
+    font-size: 10px; color: #8b949e;
+  }
+  #status-line .ok  { color: #3fb950; }
+  #status-line .err { color: #f85149; }
+
+  #legend {
+    position: fixed; bottom: 24px; right: 16px; z-index: 1000;
+    background: rgba(13,17,23,0.88); border: 1px solid #30363d;
+    border-radius: 6px; padding: 10px 12px;
+    backdrop-filter: blur(4px);
+  }
+  #legend label {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em;
+    color: #8b949e; display: block; margin-bottom: 6px;
+  }
+  #grad-bar {
+    width: 160px; height: 8px; border-radius: 4px;
+    background: linear-gradient(to right, hsl(240,90%,60%), hsl(180,90%,55%), hsl(60,90%,55%), hsl(0,90%,60%));
+    margin-bottom: 4px;
+  }
+  #grad-labels { display: flex; justify-content: space-between; font-size: 10px; color: #8b949e; }
+
+  #info-popup {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    background: rgba(13,17,23,0.95); border: 1px solid #58a6ff;
+    border-radius: 6px; padding: 14px 16px; z-index: 2000; display: none;
+    min-width: 220px; font-size: 12px; line-height: 1.8;
+  }
+  #info-popup .close {
+    position: absolute; top: 6px; right: 10px; cursor: pointer;
+    color: #8b949e; font-size: 14px;
+  }
+  #info-popup .close:hover { color: #e6edf3; }
+  #info-popup .val { color: #58a6ff; }
+  #info-popup .dir-arrow { font-size: 20px; }
+
+  #loading {
+    position: fixed; top: 16px; right: 16px; z-index: 1000;
+    font-size: 11px; color: #8b949e; display: none;
+  }
+  #loading.visible { display: block; }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div id="title">
+  HF Radar / US West Coast
+  <span>Surface Currents Archive — <a href="https://github.com/nthmost/hfradar" target="_blank" style="color:#58a6ff;text-decoration:none;">nthmost/hfradar</a></span>
+</div>
+
+<div id="controls">
+  <label>Time (UTC)</label>
+  <div id="time-display">—</div>
+  <input type="range" id="time-slider" min="0" max="23" value="23" step="1">
+  <label>Resolution</label>
+  <div id="res-buttons">
+    <button class="res-btn" data-res="6km">6km</button>
+    <button class="res-btn" data-res="2km">2km</button>
+    <button class="res-btn" data-res="1km">1km</button>
+    <button class="res-btn" data-res="500m">500m</button>
+  </div>
+  <div id="status-line">loading…</div>
+</div>
+
+<div id="legend">
+  <label>Speed</label>
+  <div id="grad-bar"></div>
+  <div id="grad-labels"><span>0 kts</span><span>1.5</span><span>3+</span></div>
+</div>
+
+<div id="info-popup">
+  <span class="close" onclick="closePopup()">✕</span>
+  <div id="popup-content"></div>
+</div>
+
+<div id="loading">fetching…</div>
+
+<script>
+const API = '/api';
+
+// ── Map ───────────────────────────────────────────────────────────────────────
+const map = L.map('map', {
+  center: [38.0, -123.5],
+  zoom: 7,
+  zoomControl: true,
+  preferCanvas: true,
+});
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution: '© OpenStreetMap contributors © CARTO | Data: NOAA CoastWatch / UCSD HFRnet',
+  subdomains: 'abcd', maxZoom: 14,
+}).addTo(map);
+
+// ── Canvas arrow layer ────────────────────────────────────────────────────────
+const canvas = document.createElement('canvas');
+canvas.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;z-index:400';
+map.getPanes().overlayPane.appendChild(canvas);
+
+let arrowData = [];
+
+function speedColor(knots) {
+  const t = Math.min(Math.max(knots / 3, 0), 1);
+  const h = (1 - t) * 240;
+  return `hsl(${h},90%,62%)`;
+}
+
+function drawArrows() {
+  const size = map.getSize();
+  canvas.width  = size.x;
+  canvas.height = size.y;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, size.x, size.y);
+
+  const origin = map.containerPointToLayerPoint([0, 0]);
+  ctx.save();
+  ctx.translate(-origin.x, -origin.y);
+
+  const zoom = map.getZoom();
+  const scale = Math.max(0.5, zoom / 8);  // scale arrows with zoom
+
+  for (const pt of arrowData) {
+    const p = map.latLngToLayerPoint([pt.lat, pt.lon]);
+    const kts   = pt.speed_ms * 1.944;
+    const dir   = pt.direction_deg * Math.PI / 180;
+    const len   = Math.max(2, Math.min(kts * 10 * scale, 36 * scale));
+
+    const dx =  len * Math.sin(dir);
+    const dy = -len * Math.cos(dir);
+
+    const color = speedColor(kts);
+    ctx.strokeStyle = color;
+    ctx.fillStyle   = color;
+    ctx.lineWidth   = 1.2;
+    ctx.globalAlpha = 0.82;
+
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+    ctx.lineTo(p.x + dx, p.y + dy);
+    ctx.stroke();
+
+    if (len > 5) {
+      const headLen = Math.max(3, len * 0.35);
+      const angle = Math.atan2(dy, dx);
+      ctx.beginPath();
+      ctx.moveTo(p.x + dx, p.y + dy);
+      ctx.lineTo(p.x + dx - headLen * Math.cos(angle - Math.PI/5),
+                 p.y + dy - headLen * Math.sin(angle - Math.PI/5));
+      ctx.lineTo(p.x + dx - headLen * Math.cos(angle + Math.PI/5),
+                 p.y + dy - headLen * Math.sin(angle + Math.PI/5));
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+map.on('moveend zoomend move zoom', drawArrows);
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let availableHours = [];   // array of ISO strings, newest last
+let currentRes = '2km';
+let fetchTimer = null;
+let statusData = {};
+
+// ── Status + time initialization ──────────────────────────────────────────────
+async function loadStatus() {
+  const r = await fetch(`${API}/status`);
+  statusData = await r.json();
+
+  let latest = null;
+  for (const [res, info] of Object.entries(statusData)) {
+    if (info.latest) {
+      const t = new Date(info.latest);
+      if (!latest || t > latest) latest = t;
+    }
+  }
+
+  if (!latest) {
+    setStatus('No data available yet.', 'err');
+    return;
+  }
+
+  // Build last-24-hours list
+  availableHours = [];
+  for (let i = 23; i >= 0; i--) {
+    const t = new Date(latest);
+    t.setUTCHours(t.getUTCHours() - i);
+    t.setUTCMinutes(0); t.setUTCSeconds(0); t.setUTCMilliseconds(0);
+    availableHours.push(t.toISOString().replace('.000Z', 'Z'));
+  }
+
+  const slider = document.getElementById('time-slider');
+  slider.max = availableHours.length - 1;
+  slider.value = availableHours.length - 1;
+  updateTimeDisplay();
+  updateResButtons();
+  scheduleFetch();
+}
+
+function updateTimeDisplay() {
+  const idx = +document.getElementById('time-slider').value;
+  const iso = availableHours[idx];
+  const d = new Date(iso);
+  document.getElementById('time-display').textContent =
+    d.toISOString().replace('T', ' ').replace('.000Z', ' UTC').replace('Z', ' UTC');
+}
+
+function updateResButtons() {
+  document.querySelectorAll('.res-btn').forEach(btn => {
+    const res = btn.dataset.res;
+    const info = statusData[res];
+    btn.classList.toggle('active', res === currentRes);
+    btn.disabled = !info || !info.total_rows;
+  });
+}
+
+function setStatus(msg, cls) {
+  const el = document.getElementById('status-line');
+  el.innerHTML = `<span class="${cls||''}">${msg}</span>`;
+}
+
+// ── Data fetching ─────────────────────────────────────────────────────────────
+function scheduleFetch() {
+  clearTimeout(fetchTimer);
+  fetchTimer = setTimeout(fetchCurrents, 150);
+}
+
+async function fetchCurrents() {
+  if (!availableHours.length) return;
+
+  const idx  = +document.getElementById('time-slider').value;
+  const time = availableHours[idx];
+  const b    = map.getBounds();
+  const pad  = 0.5;
+
+  const params = new URLSearchParams({
+    south: (b.getSouth() - pad).toFixed(3),
+    north: (b.getNorth() + pad).toFixed(3),
+    west:  (b.getWest()  - pad).toFixed(3),
+    east:  (b.getEast()  + pad).toFixed(3),
+    time,
+    resolution: currentRes,
+  });
+
+  document.getElementById('loading').classList.add('visible');
+  setStatus(`${currentRes} · ${time.slice(0,16).replace('T',' ')} UTC`, '');
+
+  try {
+    const r = await fetch(`${API}/currents/area?${params}`);
+    if (r.status === 404) {
+      arrowData = [];
+      drawArrows();
+      setStatus('No data for this area/time.', 'err');
+      return;
+    }
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    arrowData = await r.json();
+    drawArrows();
+    setStatus(`${currentRes} · ${arrowData.length.toLocaleString()} pts · ${time.slice(0,16).replace('T',' ')} UTC`, 'ok');
+  } catch(e) {
+    setStatus(`Error: ${e.message}`, 'err');
+  } finally {
+    document.getElementById('loading').classList.remove('visible');
+  }
+}
+
+// ── Controls ──────────────────────────────────────────────────────────────────
+document.getElementById('time-slider').addEventListener('input', () => {
+  updateTimeDisplay();
+  scheduleFetch();
+});
+
+document.querySelectorAll('.res-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (btn.disabled) return;
+    currentRes = btn.dataset.res;
+    updateResButtons();
+    scheduleFetch();
+  });
+});
+
+map.on('moveend zoomend', scheduleFetch);
+
+// ── Click to inspect ──────────────────────────────────────────────────────────
+map.on('click', e => {
+  if (!arrowData.length) return;
+
+  // Find nearest point within 30px
+  let best = null, bestDist = 30;
+  for (const pt of arrowData) {
+    const pp = map.latLngToContainerPoint([pt.lat, pt.lon]);
+    const dx = pp.x - e.containerPoint.x;
+    const dy = pp.y - e.containerPoint.y;
+    const d  = Math.sqrt(dx*dx + dy*dy);
+    if (d < bestDist) { bestDist = d; best = pt; }
+  }
+  if (!best) { closePopup(); return; }
+
+  const kts   = (best.speed_ms * 1.944).toFixed(2);
+  const dir16 = compassDir(best.direction_deg);
+
+  document.getElementById('popup-content').innerHTML = `
+    <div style="margin-bottom:8px;font-size:13px;color:#e6edf3">
+      ${compassArrow(best.direction_deg)} ${dir16} at <span class="val">${kts} kts</span>
+    </div>
+    <div>lat <span class="val">${best.lat.toFixed(4)}</span></div>
+    <div>lon <span class="val">${best.lon.toFixed(4)}</span></div>
+    <div>u   <span class="val">${best.u_ms.toFixed(3)} m/s</span></div>
+    <div>v   <span class="val">${best.v_ms.toFixed(3)} m/s</span></div>
+    <div>res <span class="val">${best.resolution}</span></div>
+    <div style="margin-top:8px;font-size:10px;color:#8b949e">${best.time.replace('T',' ').slice(0,16)} UTC</div>
+  `;
+  document.getElementById('info-popup').style.display = 'block';
+});
+
+function closePopup() {
+  document.getElementById('info-popup').style.display = 'none';
+}
+
+function compassDir(deg) {
+  const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+  return dirs[Math.round(deg / 22.5) % 16];
+}
+
+function compassArrow(deg) {
+  // Unicode arrows for 8 directions
+  const arrows = ['↑','↗','→','↘','↓','↙','←','↖'];
+  return arrows[Math.round(deg / 45) % 8];
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadStatus();
+</script>
+</body>
+</html>
