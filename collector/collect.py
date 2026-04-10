@@ -30,30 +30,32 @@ ERDDAP_BASE = "https://coastwatch.pfeg.noaa.gov/erddap/griddap"
 # Coverage bounds and chunk sizes per dataset.
 # Smaller chunks avoid ERDDAP response size limits (~50MB per request is safe).
 # Bounds are approximate — ERDDAP will snap to the nearest grid cell.
+# Coverage bounds from ERDDAP axis metadata (actual_range).
+# Chunk sizes chosen to keep responses under ~50MB.
 DATASETS = {
     "uswc_6km": {
         "erddap_id": "ucsdHfrW6",
         "table": "hfr_uswc_6km",
         "chunk_hours": 24,
-        "south": 30.0, "north": 50.0, "west": -130.0, "east": -117.0,
+        "south": 30.25, "north": 49.99, "west": -130.36, "east": -115.81,
     },
     "uswc_2km": {
         "erddap_id": "ucsdHfrW2",
         "table": "hfr_uswc_2km",
-        "chunk_hours": 6,   # smaller chunks — denser grid
-        "south": 30.0, "north": 50.0, "west": -130.0, "east": -117.0,
+        "chunk_hours": 6,
+        "south": 30.25, "north": 49.99, "west": -130.36, "east": -115.81,
     },
     "uswc_1km": {
         "erddap_id": "ucsdHfrW1",
         "table": "hfr_uswc_1km",
         "chunk_hours": 3,
-        "south": 30.0, "north": 50.0, "west": -130.0, "east": -117.0,
+        "south": 30.25, "north": 49.99, "west": -130.36, "east": -115.81,
     },
     "uswc_500m": {
         "erddap_id": "ucsdHfrW500",
         "table": "hfr_uswc_500m",
-        "chunk_hours": 1,   # finest grid — one hour at a time
-        "south": 33.0, "north": 40.0, "west": -123.5, "east": -117.0,
+        "chunk_hours": 1,
+        "south": 37.455, "north": 38.139, "west": -122.594, "east": -122.046,
     },
 }
 
