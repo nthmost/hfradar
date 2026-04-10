@@ -36,7 +36,7 @@ DATASETS = {
     "uswc_6km": {
         "erddap_id": "ucsdHfrW6",
         "table": "hfr_uswc_6km",
-        "chunk_hours": 24,
+        "chunk_hours": 6,
         "south": 30.25, "north": 49.99, "west": -130.36, "east": -115.81,
     },
     "uswc_2km": {
