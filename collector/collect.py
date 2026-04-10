@@ -27,11 +27,34 @@ log = logging.getLogger(__name__)
 
 ERDDAP_BASE = "https://coastwatch.pfeg.noaa.gov/erddap/griddap"
 
+# Coverage bounds and chunk sizes per dataset.
+# Smaller chunks avoid ERDDAP response size limits (~50MB per request is safe).
+# Bounds are approximate — ERDDAP will snap to the nearest grid cell.
 DATASETS = {
-    "uswc_6km":  {"erddap_id": "ucsdHfrW6",   "table": "hfr_uswc_6km",  "chunk_hours": 24},
-    "uswc_2km":  {"erddap_id": "ucsdHfrW2",   "table": "hfr_uswc_2km",  "chunk_hours": 24},
-    "uswc_1km":  {"erddap_id": "ucsdHfrW1",   "table": "hfr_uswc_1km",  "chunk_hours": 12},
-    "uswc_500m": {"erddap_id": "ucsdHfrW500", "table": "hfr_uswc_500m", "chunk_hours": 6},
+    "uswc_6km": {
+        "erddap_id": "ucsdHfrW6",
+        "table": "hfr_uswc_6km",
+        "chunk_hours": 24,
+        "south": 30.0, "north": 50.0, "west": -130.0, "east": -117.0,
+    },
+    "uswc_2km": {
+        "erddap_id": "ucsdHfrW2",
+        "table": "hfr_uswc_2km",
+        "chunk_hours": 6,   # smaller chunks — denser grid
+        "south": 30.0, "north": 50.0, "west": -130.0, "east": -117.0,
+    },
+    "uswc_1km": {
+        "erddap_id": "ucsdHfrW1",
+        "table": "hfr_uswc_1km",
+        "chunk_hours": 3,
+        "south": 30.0, "north": 50.0, "west": -130.0, "east": -117.0,
+    },
+    "uswc_500m": {
+        "erddap_id": "ucsdHfrW500",
+        "table": "hfr_uswc_500m",
+        "chunk_hours": 1,   # finest grid — one hour at a time
+        "south": 33.0, "north": 40.0, "west": -123.5, "east": -117.0,
+    },
 }
 
 M_PER_S_TO_KNOTS = 1.94384
@@ -51,16 +74,18 @@ def last_ingested_time(conn, dataset):
         return row[0] if row and row[0] else None
 
 
-def fetch_chunk(erddap_id, t_start, t_end):
+def fetch_chunk(erddap_id, cfg, t_start, t_end):
     """
     Fetch one time chunk from ERDDAP. Returns list of (time, lat, lon, u, v) tuples.
     Only non-NaN rows included.
     """
     t0 = t_start.strftime('%Y-%m-%dT%H:%M:%SZ')
     t1 = t_end.strftime('%Y-%m-%dT%H:%M:%SZ')
+    s, n = cfg["south"], cfg["north"]
+    w, e = cfg["west"], cfg["east"]
     query = (
-        f"water_u[({t0}):1:({t1})][][]"
-        f",water_v[({t0}):1:({t1})][][]"
+        f"water_u[({t0}):1:({t1})][({s}):1:({n})][({w}):1:({e})]"
+        f",water_v[({t0}):1:({t1})][({s}):1:({n})][({w}):1:({e})]"
     )
     url = f"{ERDDAP_BASE}/{erddap_id}.csv?{query}"
     log.debug("Fetching %s", url)
@@ -144,7 +169,7 @@ def run_dataset(conn, dataset_key, backfill_days, dry_run):
     while t < now:
         t_end = min(t + timedelta(hours=chunk_hours - 1), now)
         log.info("  fetching %s → %s", t, t_end)
-        rows = fetch_chunk(erddap_id, t, t_end)
+        rows = fetch_chunk(erddap_id, cfg, t, t_end)
         log.info("  got %d valid points", len(rows))
         n = ingest_chunk(conn, table, dataset_key, rows, dry_run=dry_run)
         total += n
