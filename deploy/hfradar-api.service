@@ -1,0 +1,16 @@
+[Unit]
+Description=HF Radar API
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=nthmost
+WorkingDirectory=/opt/hfradar
+EnvironmentFile=/opt/hfradar/.env
+ExecStart=/opt/hfradar/venv/bin/uvicorn api.main:app --host 127.0.0.1 --port 8042 --workers 2
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
