@@ -17,14 +17,23 @@ from typing import Optional
 
 import psycopg2
 import psycopg2.extras
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
 
 app = FastAPI(
     title="HF Radar Surface Current API",
     description="Historical US West Coast HF radar surface current data, archived beyond the standard 90-day window.",
     version="0.1.0",
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
@@ -79,7 +88,8 @@ def health():
 
 
 @app.get("/status")
-def status():
+@limiter.limit("60/minute")
+def status(request: Request):
     conn = get_db()
     results = {}
     try:
@@ -100,7 +110,9 @@ def status():
 
 
 @app.get("/currents/point")
+@limiter.limit("120/minute")
 def currents_point(
+    request: Request,
     lat: float = Query(..., description="Latitude (decimal degrees)"),
     lon: float = Query(..., description="Longitude (decimal degrees, negative=west)"),
     time: str  = Query(..., description="UTC time (ISO 8601, e.g. 2026-03-10T14:00:00Z)"),
@@ -143,7 +155,9 @@ def currents_point(
 
 
 @app.get("/currents/series")
+@limiter.limit("20/minute")
 def currents_series(
+    request: Request,
     lat:   float = Query(...),
     lon:   float = Query(...),
     start: str   = Query(..., description="Start time (ISO 8601)"),
@@ -192,7 +206,9 @@ def currents_series(
 
 
 @app.get("/currents/area")
+@limiter.limit("15/minute")
 def currents_area(
+    request: Request,
     south: float = Query(...),
     north: float = Query(...),
     west:  float = Query(...),
