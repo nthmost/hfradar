@@ -11,6 +11,7 @@ Usage:
 """
 
 import argparse
+import fcntl
 import json
 import logging
 import math
@@ -19,6 +20,8 @@ import sys
 from datetime import datetime, timedelta, timezone
 from urllib.error import URLError
 from urllib.request import urlopen, Request
+
+LOCK_FILE = "/tmp/hfradar-collect.lock"
 
 import psycopg2
 from psycopg2.extras import execute_values
@@ -235,15 +238,33 @@ def main():
                         help="Fetch data but don't write to database")
     parser.add_argument("--skip-gap-check", action="store_true",
                         help="Skip staleness check (use during backfill)")
+    parser.add_argument("--no-lock", action="store_true",
+                        help="Skip lock file (use for dedicated per-dataset runs)")
     args = parser.parse_args()
 
-    conn = get_db()
-    targets = list(DATASETS) if args.dataset == "all" else [args.dataset]
-    for ds in targets:
-        run_dataset(conn, ds, args.backfill_days, args.dry_run)
+    # Prevent overlapping cron runs for "all" dataset mode
+    lock_fh = None
+    if not args.no_lock and args.dataset == "all":
+        lock_fh = open(LOCK_FILE, "w")
+        try:
+            fcntl.flock(lock_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            log.info("Another collector instance is running, exiting.")
+            sys.exit(0)
 
-    if not args.dry_run and not args.skip_gap_check and args.dataset == "all":
-        check_gaps(conn)
+    try:
+        conn = get_db()
+        targets = list(DATASETS) if args.dataset == "all" else [args.dataset]
+        for ds in targets:
+            run_dataset(conn, ds, args.backfill_days, args.dry_run)
+
+        if not args.dry_run and not args.skip_gap_check and args.dataset == "all":
+            check_gaps(conn)
+        conn.close()
+    finally:
+        if lock_fh:
+            fcntl.flock(lock_fh, fcntl.LOCK_UN)
+            lock_fh.close()
 
     conn.close()
 
