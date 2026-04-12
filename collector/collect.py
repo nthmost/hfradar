@@ -21,7 +21,9 @@ from datetime import datetime, timedelta, timezone
 from urllib.error import URLError
 from urllib.request import urlopen, Request
 
-LOCK_FILE = "/tmp/hfradar-collect.lock"
+def lock_file(dataset):
+    """Per-dataset lock file so one dataset's backfill doesn't block others."""
+    return f"/tmp/hfradar-collect-{dataset}.lock"
 
 import psycopg2
 from psycopg2.extras import execute_values
@@ -242,29 +244,32 @@ def main():
                         help="Skip lock file (use for dedicated per-dataset runs)")
     args = parser.parse_args()
 
-    # Prevent overlapping cron runs for "all" dataset mode
-    lock_fh = None
-    if not args.no_lock and args.dataset == "all":
-        lock_fh = open(LOCK_FILE, "w")
-        try:
-            fcntl.flock(lock_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError:
-            log.info("Another collector instance is running, exiting.")
-            sys.exit(0)
+    conn = get_db()
+    targets = list(DATASETS) if args.dataset == "all" else [args.dataset]
 
-    try:
-        conn = get_db()
-        targets = list(DATASETS) if args.dataset == "all" else [args.dataset]
-        for ds in targets:
+    for ds in targets:
+        if args.no_lock:
             run_dataset(conn, ds, args.backfill_days, args.dry_run)
+            continue
 
-        if not args.dry_run and not args.skip_gap_check and args.dataset == "all":
-            check_gaps(conn)
-        conn.close()
-    finally:
-        if lock_fh:
-            fcntl.flock(lock_fh, fcntl.LOCK_UN)
-            lock_fh.close()
+        # Per-dataset lock: backfill for one dataset never blocks another
+        lf = lock_file(ds)
+        try:
+            fh = open(lf, "w")
+            fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            log.info("%s: already running, skipping.", ds)
+            continue
+
+        try:
+            run_dataset(conn, ds, args.backfill_days, args.dry_run)
+        finally:
+            fcntl.flock(fh, fcntl.LOCK_UN)
+            fh.close()
+
+    if not args.dry_run and not args.skip_gap_check and args.dataset == "all":
+        check_gaps(conn)
+    conn.close()
 
     conn.close()
 
