@@ -8,12 +8,8 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-
   body { background: #0d1117; font-family: 'Courier New', monospace; color: #c9d1d9; }
-
   #map { width: 100vw; height: 100vh; }
-
-  /* Leaflet dark tile filter */
   .leaflet-tile { filter: brightness(0.6) saturate(0.4) hue-rotate(180deg); }
 
   #title {
@@ -24,59 +20,114 @@
   }
   #title span { color: #8b949e; font-size: 11px; display: block; margin-top: 2px; }
 
+  /* ── Controls panel ── */
   #controls {
     position: fixed; bottom: 24px; left: 16px; z-index: 1000;
-    background: rgba(13,17,23,0.88); border: 1px solid #30363d;
-    border-radius: 6px; padding: 12px 14px; width: 300px;
-    backdrop-filter: blur(4px);
+    background: rgba(13,17,23,0.92); border: 1px solid #30363d;
+    border-radius: 6px; width: 310px; backdrop-filter: blur(4px);
+    overflow: hidden;
   }
 
-  #controls label {
+  /* ── Tabs ── */
+  #tabs {
+    display: flex; border-bottom: 1px solid #30363d;
+  }
+  .tab-btn {
+    flex: 1; background: none; border: none; border-bottom: 2px solid transparent;
+    color: #8b949e; font-family: inherit; font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.1em; padding: 9px 0; cursor: pointer; transition: all 0.15s;
+  }
+  .tab-btn:hover { color: #c9d1d9; }
+  .tab-btn.active { color: #58a6ff; border-bottom-color: #58a6ff; }
+
+  .tab-panel { display: none; padding: 12px 14px; }
+  .tab-panel.active { display: block; }
+
+  /* ── Shared control styles ── */
+  #controls label, .ctrl-label {
     font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em;
     color: #8b949e; display: block; margin-bottom: 6px;
   }
+  #time-display { font-size: 12px; color: #e6edf3; margin-bottom: 8px; }
+  #time-slider { width: 100%; accent-color: #58a6ff; margin-bottom: 12px; cursor: pointer; }
 
-  #time-display {
-    font-size: 12px; color: #e6edf3; margin-bottom: 8px;
-  }
-
-  #time-slider {
-    width: 100%; accent-color: #58a6ff; margin-bottom: 12px; cursor: pointer;
-  }
-
-  #res-buttons { display: flex; gap: 6px; margin-bottom: 12px; }
-  .res-btn {
+  .btn-row { display: flex; gap: 6px; margin-bottom: 12px; }
+  .ctrl-btn {
     flex: 1; background: #161b22; border: 1px solid #30363d;
     color: #8b949e; font-family: inherit; font-size: 11px;
     padding: 4px 0; border-radius: 4px; cursor: pointer;
-    text-transform: uppercase; letter-spacing: 0.05em;
-    transition: all 0.15s;
+    text-transform: uppercase; letter-spacing: 0.05em; transition: all 0.15s;
   }
-  .res-btn:hover { border-color: #58a6ff; color: #58a6ff; }
-  .res-btn.active { background: #0d419d; border-color: #58a6ff; color: #58a6ff; }
-  .res-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .ctrl-btn:hover { border-color: #58a6ff; color: #58a6ff; }
+  .ctrl-btn.active { background: #0d419d; border-color: #58a6ff; color: #58a6ff; }
+  .ctrl-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
-  #status-line {
-    font-size: 10px; color: #8b949e;
+  #status-line { font-size: 10px; color: #8b949e; }
+  .ok  { color: #3fb950; }
+  .err { color: #f85149; }
+  .warn { color: #d29922; }
+
+  /* ── Drift tab ── */
+  .input-row { margin-bottom: 10px; }
+  .input-row input, .input-row select {
+    width: 100%; background: #161b22; border: 1px solid #30363d;
+    color: #e6edf3; font-family: inherit; font-size: 12px;
+    padding: 5px 8px; border-radius: 4px; outline: none;
+    transition: border-color 0.15s;
   }
-  #status-line .ok  { color: #3fb950; }
-  #status-line .err { color: #f85149; }
+  .input-row input:focus, .input-row select:focus { border-color: #58a6ff; }
+  .input-row input[type=number] { -moz-appearance: textfield; }
 
+  .coords-row { display: flex; gap: 6px; margin-bottom: 10px; }
+  .coords-row input { flex: 1; }
+
+  #pick-hint {
+    font-size: 10px; color: #58a6ff; margin-bottom: 10px;
+    cursor: pointer; text-decoration: underline dotted;
+  }
+  #pick-hint.picking { color: #3fb950; }
+
+  #predict-btn {
+    width: 100%; background: #0d419d; border: 1px solid #58a6ff;
+    color: #58a6ff; font-family: inherit; font-size: 12px; letter-spacing: 0.08em;
+    text-transform: uppercase; padding: 8px 0; border-radius: 4px;
+    cursor: pointer; transition: all 0.15s; margin-bottom: 10px;
+  }
+  #predict-btn:hover { background: #1158c7; }
+  #predict-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  #drift-status { font-size: 10px; color: #8b949e; margin-bottom: 8px; min-height: 14px; }
+
+  #drift-results { max-height: 180px; overflow-y: auto; font-size: 10px; }
+  #drift-results::-webkit-scrollbar { width: 4px; }
+  #drift-results::-webkit-scrollbar-track { background: #161b22; }
+  #drift-results::-webkit-scrollbar-thumb { background: #30363d; border-radius: 2px; }
+
+  .traj-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 3px 0; border-bottom: 1px solid #21262d; gap: 4px;
+    cursor: pointer; transition: background 0.1s;
+  }
+  .traj-row:hover { background: rgba(88,166,255,0.08); }
+  .traj-row .t { color: #8b949e; flex-shrink: 0; }
+  .traj-row .pos { color: #e6edf3; }
+  .traj-row .spd { color: #58a6ff; flex-shrink: 0; }
+  .traj-row .nodata { color: #f85149; }
+  .traj-row.highlight .pos { color: #58a6ff; }
+
+  #drift-warning {
+    font-size: 10px; color: #d29922; margin-top: 6px; line-height: 1.5;
+    display: none;
+  }
+
+  /* ── Legend ── */
   #legend {
     position: fixed; bottom: 24px; right: 16px; z-index: 1000;
     background: rgba(13,17,23,0.88); border: 1px solid #30363d;
-    border-radius: 6px; padding: 10px 12px;
-    backdrop-filter: blur(4px);
+    border-radius: 6px; padding: 10px 12px; backdrop-filter: blur(4px);
   }
-  #legend label {
-    font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em;
-    color: #8b949e; display: block; margin-bottom: 6px;
-  }
-  #grad-bar {
-    width: 160px; height: 8px; border-radius: 4px;
-    background: linear-gradient(to right, hsl(240,90%,60%), hsl(180,90%,55%), hsl(60,90%,55%), hsl(0,90%,60%));
-    margin-bottom: 4px;
-  }
+  #legend label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: #8b949e; display: block; margin-bottom: 6px; }
+  #grad-bar { width: 160px; height: 8px; border-radius: 4px; background: linear-gradient(to right, hsl(240,90%,60%), hsl(180,90%,55%), hsl(60,90%,55%), hsl(0,90%,60%)); margin-bottom: 4px; }
   #grad-labels { display: flex; justify-content: space-between; font-size: 10px; color: #8b949e; }
 
   #info-popup {
@@ -85,18 +136,11 @@
     border-radius: 6px; padding: 14px 16px; z-index: 2000; display: none;
     min-width: 220px; font-size: 12px; line-height: 1.8;
   }
-  #info-popup .close {
-    position: absolute; top: 6px; right: 10px; cursor: pointer;
-    color: #8b949e; font-size: 14px;
-  }
+  #info-popup .close { position: absolute; top: 6px; right: 10px; cursor: pointer; color: #8b949e; font-size: 14px; }
   #info-popup .close:hover { color: #e6edf3; }
   #info-popup .val { color: #58a6ff; }
-  #info-popup .dir-arrow { font-size: 20px; }
 
-  #loading {
-    position: fixed; top: 16px; right: 16px; z-index: 1000;
-    font-size: 11px; color: #8b949e; display: none;
-  }
+  #loading { position: fixed; top: 16px; right: 16px; z-index: 1000; font-size: 11px; color: #8b949e; display: none; }
   #loading.visible { display: block; }
 </style>
 </head>
@@ -110,17 +154,50 @@
 </div>
 
 <div id="controls">
-  <label>Time (UTC)</label>
-  <div id="time-display">—</div>
-  <input type="range" id="time-slider" min="0" max="23" value="23" step="1">
-  <label>Resolution</label>
-  <div id="res-buttons">
-    <button class="res-btn" data-res="6km">6km</button>
-    <button class="res-btn" data-res="2km">2km</button>
-    <button class="res-btn" data-res="1km">1km</button>
-    <button class="res-btn" data-res="500m">500m</button>
+  <div id="tabs">
+    <button class="tab-btn active" data-tab="currents">Currents</button>
+    <button class="tab-btn" data-tab="drift">Drift</button>
   </div>
-  <div id="status-line">loading…</div>
+
+  <!-- ── Currents tab ── -->
+  <div id="tab-currents" class="tab-panel active">
+    <label>Time (UTC)</label>
+    <div id="time-display">—</div>
+    <input type="range" id="time-slider" min="0" max="23" value="23" step="1">
+    <label>Resolution</label>
+    <div class="btn-row" id="res-buttons">
+      <button class="ctrl-btn" data-res="6km">6km</button>
+      <button class="ctrl-btn" data-res="2km">2km</button>
+      <button class="ctrl-btn" data-res="1km">1km</button>
+      <button class="ctrl-btn" data-res="500m">500m</button>
+    </div>
+    <div id="status-line">loading…</div>
+  </div>
+
+  <!-- ── Drift tab ── -->
+  <div id="tab-drift" class="tab-panel">
+    <div class="ctrl-label">Last known position</div>
+    <div id="pick-hint" onclick="togglePicking()">↖ click map to set coordinates</div>
+    <div class="coords-row">
+      <input type="number" id="d-lat" placeholder="Latitude" step="0.0001">
+      <input type="number" id="d-lon" placeholder="Longitude" step="0.0001">
+    </div>
+    <div class="ctrl-label">Date &amp; time (UTC)</div>
+    <div class="input-row">
+      <input type="datetime-local" id="d-time" step="3600">
+    </div>
+    <div class="ctrl-label">Prediction window</div>
+    <div class="btn-row" id="hours-buttons">
+      <button class="ctrl-btn" data-hours="6">6h</button>
+      <button class="ctrl-btn active" data-hours="24">24h</button>
+      <button class="ctrl-btn" data-hours="48">48h</button>
+      <button class="ctrl-btn" data-hours="72">72h</button>
+    </div>
+    <button id="predict-btn" onclick="runDrift()">Predict drift</button>
+    <div id="drift-status"></div>
+    <div id="drift-results"></div>
+    <div id="drift-warning"></div>
+  </div>
 </div>
 
 <div id="legend">
@@ -141,12 +218,8 @@ const API = '/api';
 
 // ── Map ───────────────────────────────────────────────────────────────────────
 const map = L.map('map', {
-  center: [38.0, -123.5],
-  zoom: 7,
-  zoomControl: true,
-  preferCanvas: true,
+  center: [38.0, -123.5], zoom: 7, zoomControl: true, preferCanvas: true,
 });
-
 L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
   attribution: '© OpenStreetMap contributors © CARTO | Data: NOAA CoastWatch / UCSD HFRnet',
   subdomains: 'abcd', maxZoom: 14,
@@ -156,106 +229,148 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
 const canvas = document.createElement('canvas');
 canvas.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;z-index:400';
 map.getPanes().overlayPane.appendChild(canvas);
-
 let arrowData = [];
 
 function speedColor(knots) {
   const t = Math.min(Math.max(knots / 3, 0), 1);
-  const h = (1 - t) * 240;
-  return `hsl(${h},90%,62%)`;
+  return `hsl(${(1-t)*240},90%,62%)`;
 }
 
 function drawArrows() {
   const size = map.getSize();
-  canvas.width  = size.x;
-  canvas.height = size.y;
+  canvas.width = size.x; canvas.height = size.y;
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, size.x, size.y);
-
-  const origin = map.containerPointToLayerPoint([0, 0]);
-  ctx.save();
-  ctx.translate(-origin.x, -origin.y);
-
-  const zoom = map.getZoom();
-  const scale = Math.max(0.5, zoom / 8);  // scale arrows with zoom
-
+  const origin = map.containerPointToLayerPoint([0,0]);
+  ctx.save(); ctx.translate(-origin.x, -origin.y);
+  const scale = Math.max(0.5, map.getZoom() / 8);
   for (const pt of arrowData) {
     const p = map.latLngToLayerPoint([pt.lat, pt.lon]);
-    const kts   = pt.speed_ms * 1.944;
-    const dir   = pt.direction_deg * Math.PI / 180;
-    const len   = Math.max(2, Math.min(kts * 10 * scale, 36 * scale));
-
-    const dx =  len * Math.sin(dir);
-    const dy = -len * Math.cos(dir);
-
-    const color = speedColor(kts);
-    ctx.strokeStyle = color;
-    ctx.fillStyle   = color;
-    ctx.lineWidth   = 1.2;
-    ctx.globalAlpha = 0.82;
-
-    ctx.beginPath();
-    ctx.moveTo(p.x, p.y);
-    ctx.lineTo(p.x + dx, p.y + dy);
-    ctx.stroke();
-
+    const kts = pt.speed_ms * 1.944;
+    const dir = pt.direction_deg * Math.PI / 180;
+    const len = Math.max(2, Math.min(kts * 10 * scale, 36 * scale));
+    const dx = len * Math.sin(dir), dy = -len * Math.cos(dir);
+    ctx.strokeStyle = ctx.fillStyle = speedColor(kts);
+    ctx.lineWidth = 1.2; ctx.globalAlpha = 0.82;
+    ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x+dx, p.y+dy); ctx.stroke();
     if (len > 5) {
-      const headLen = Math.max(3, len * 0.35);
-      const angle = Math.atan2(dy, dx);
+      const hl = Math.max(3, len * 0.35), a = Math.atan2(dy, dx);
       ctx.beginPath();
-      ctx.moveTo(p.x + dx, p.y + dy);
-      ctx.lineTo(p.x + dx - headLen * Math.cos(angle - Math.PI/5),
-                 p.y + dy - headLen * Math.sin(angle - Math.PI/5));
-      ctx.lineTo(p.x + dx - headLen * Math.cos(angle + Math.PI/5),
-                 p.y + dy - headLen * Math.sin(angle + Math.PI/5));
-      ctx.closePath();
-      ctx.fill();
+      ctx.moveTo(p.x+dx, p.y+dy);
+      ctx.lineTo(p.x+dx - hl*Math.cos(a-Math.PI/5), p.y+dy - hl*Math.sin(a-Math.PI/5));
+      ctx.lineTo(p.x+dx - hl*Math.cos(a+Math.PI/5), p.y+dy - hl*Math.sin(a+Math.PI/5));
+      ctx.closePath(); ctx.fill();
     }
   }
   ctx.restore();
 }
-
 map.on('moveend zoomend move zoom', drawArrows);
 
-// ── State ─────────────────────────────────────────────────────────────────────
-let availableHours = [];   // array of ISO strings, newest last
-let currentRes = '2km';
-let fetchTimer = null;
-let statusData = {};
+// ── Drift overlay ─────────────────────────────────────────────────────────────
+let driftLayer = L.layerGroup().addTo(map);
+let incidentMarker = null;
+let picking = false;
 
-// ── Status + time initialization ──────────────────────────────────────────────
+function togglePicking() {
+  picking = !picking;
+  const hint = document.getElementById('pick-hint');
+  if (picking) {
+    hint.textContent = '✓ click the map to set location…';
+    hint.classList.add('picking');
+    map.getContainer().style.cursor = 'crosshair';
+  } else {
+    hint.textContent = '↖ click map to set coordinates';
+    hint.classList.remove('picking');
+    map.getContainer().style.cursor = '';
+  }
+}
+
+function drawDriftTrajectory(traj) {
+  driftLayer.clearLayers();
+  if (!traj || traj.length < 2) return;
+
+  const latlngs = traj.map(p => [p.lat, p.lon]);
+
+  // Dashed trajectory line
+  L.polyline(latlngs, {
+    color: '#58a6ff', weight: 2, opacity: 0.7,
+    dashArray: '6 4',
+  }).addTo(driftLayer);
+
+  // Hourly dots, colored by progression
+  traj.forEach((p, i) => {
+    const t = i / (traj.length - 1);
+    const hue = 220 - t * 180;  // blue → green → yellow
+    const color = p.no_data ? '#f85149' : `hsl(${hue},80%,60%)`;
+    const r = i === 0 ? 7 : i === traj.length - 1 ? 6 : 4;
+
+    const dot = L.circleMarker([p.lat, p.lon], {
+      radius: r, color: '#0d1117', weight: 1.5,
+      fillColor: color, fillOpacity: 0.9,
+    }).addTo(driftLayer);
+
+    const label = i === 0 ? 'Incident' : `+${p.hour}h`;
+    const kts = p.speed_ms != null ? (p.speed_ms * 1.944).toFixed(2) + ' kts' : '—';
+    dot.bindTooltip(
+      `<div style="font-family:monospace;font-size:11px;line-height:1.6">
+        <b>${label}</b><br>
+        ${p.time.slice(0,16).replace('T',' ')} UTC<br>
+        ${p.lat.toFixed(4)}°N, ${p.lon.toFixed(4)}°<br>
+        ${p.no_data ? '<span style="color:#f85149">no radar data</span>' : kts + ' @ ' + compassDir(p.direction_deg) }
+      </div>`,
+      { sticky: false, direction: 'top', opacity: 0.95 }
+    );
+  });
+
+  // Incident pin
+  const last = traj[traj.length - 1];
+  driftLayer.addLayer(L.circleMarker([traj[0].lat, traj[0].lon], {
+    radius: 8, color: '#fff', weight: 2, fillColor: '#f85149', fillOpacity: 1,
+  }));
+
+  // Fit map to trajectory
+  map.fitBounds(L.latLngBounds(latlngs).pad(0.15));
+}
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let availableHours = [];
+let currentRes = '2km';
+let statusData = {};
+let fetchTimer = null;
+let selectedHours = 24;
+let currentTraj = null;
+
+// ── Status init ───────────────────────────────────────────────────────────────
 async function loadStatus() {
   const r = await fetch(`${API}/status`);
   statusData = await r.json();
-
   let latest = null;
-  for (const [res, info] of Object.entries(statusData)) {
+  for (const info of Object.values(statusData)) {
     if (info.latest) {
       const t = new Date(info.latest);
       if (!latest || t > latest) latest = t;
     }
   }
-
-  if (!latest) {
-    setStatus('No data available yet.', 'err');
-    return;
-  }
-
-  // Build last-24-hours list
+  if (!latest) { setStatus('No data available yet.', 'err'); return; }
   availableHours = [];
   for (let i = 23; i >= 0; i--) {
     const t = new Date(latest);
     t.setUTCHours(t.getUTCHours() - i);
     t.setUTCMinutes(0); t.setUTCSeconds(0); t.setUTCMilliseconds(0);
-    availableHours.push(t.toISOString().replace('.000Z', 'Z'));
+    availableHours.push(t.toISOString().replace('.000Z','Z'));
   }
-
   const slider = document.getElementById('time-slider');
   slider.max = availableHours.length - 1;
   slider.value = availableHours.length - 1;
   updateTimeDisplay();
   updateResButtons();
   scheduleFetch();
+
+  // Pre-fill drift time with latest available
+  const dtInput = document.getElementById('d-time');
+  if (!dtInput.value) {
+    dtInput.value = new Date(latest).toISOString().slice(0,16);
+  }
 }
 
 function updateTimeDisplay() {
@@ -263,11 +378,11 @@ function updateTimeDisplay() {
   const iso = availableHours[idx];
   const d = new Date(iso);
   document.getElementById('time-display').textContent =
-    d.toISOString().replace('T', ' ').replace('.000Z', ' UTC').replace('Z', ' UTC');
+    d.toISOString().replace('T',' ').replace('.000Z',' UTC').replace('Z',' UTC');
 }
 
 function updateResButtons() {
-  document.querySelectorAll('.res-btn').forEach(btn => {
+  document.querySelectorAll('#res-buttons .ctrl-btn').forEach(btn => {
     const res = btn.dataset.res;
     const info = statusData[res];
     btn.classList.toggle('active', res === currentRes);
@@ -280,58 +395,145 @@ function setStatus(msg, cls) {
   el.innerHTML = `<span class="${cls||''}">${msg}</span>`;
 }
 
-// ── Data fetching ─────────────────────────────────────────────────────────────
-function scheduleFetch() {
-  clearTimeout(fetchTimer);
-  fetchTimer = setTimeout(fetchCurrents, 150);
-}
+// ── Current fetch ─────────────────────────────────────────────────────────────
+function scheduleFetch() { clearTimeout(fetchTimer); fetchTimer = setTimeout(fetchCurrents, 150); }
 
 async function fetchCurrents() {
   if (!availableHours.length) return;
-
   const idx  = +document.getElementById('time-slider').value;
   const time = availableHours[idx];
   const b    = map.getBounds();
-  const pad  = 0.5;
-
   const params = new URLSearchParams({
-    south: (b.getSouth() - pad).toFixed(3),
-    north: (b.getNorth() + pad).toFixed(3),
-    west:  (b.getWest()  - pad).toFixed(3),
-    east:  (b.getEast()  + pad).toFixed(3),
-    time,
-    resolution: currentRes,
+    south: (b.getSouth()-0.5).toFixed(3), north: (b.getNorth()+0.5).toFixed(3),
+    west:  (b.getWest()-0.5).toFixed(3),  east:  (b.getEast()+0.5).toFixed(3),
+    time, resolution: currentRes,
   });
-
   document.getElementById('loading').classList.add('visible');
   setStatus(`${currentRes} · ${time.slice(0,16).replace('T',' ')} UTC`, '');
-
   try {
     const r = await fetch(`${API}/currents/area?${params}`);
-    if (r.status === 404) {
-      arrowData = [];
-      drawArrows();
-      setStatus('No data for this area/time.', 'err');
-      return;
-    }
+    if (r.status === 404) { arrowData = []; drawArrows(); setStatus('No data for this area/time.', 'err'); return; }
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     arrowData = await r.json();
     drawArrows();
     setStatus(`${currentRes} · ${arrowData.length.toLocaleString()} pts · ${time.slice(0,16).replace('T',' ')} UTC`, 'ok');
+  } catch(e) { setStatus(`Error: ${e.message}`, 'err'); }
+  finally { document.getElementById('loading').classList.remove('visible'); }
+}
+
+// ── Drift prediction ──────────────────────────────────────────────────────────
+async function runDrift() {
+  const lat  = parseFloat(document.getElementById('d-lat').value);
+  const lon  = parseFloat(document.getElementById('d-lon').value);
+  const time = document.getElementById('d-time').value;
+
+  if (isNaN(lat) || isNaN(lon)) {
+    document.getElementById('drift-status').innerHTML = '<span class="err">Enter coordinates or click the map.</span>';
+    return;
+  }
+  if (!time) {
+    document.getElementById('drift-status').innerHTML = '<span class="err">Enter a date and time.</span>';
+    return;
+  }
+
+  const btn = document.getElementById('predict-btn');
+  btn.disabled = true;
+  document.getElementById('drift-status').innerHTML = '<span class="warn">computing…</span>';
+  document.getElementById('drift-results').innerHTML = '';
+  document.getElementById('drift-warning').style.display = 'none';
+  driftLayer.clearLayers();
+
+  try {
+    const r = await fetch(`${API}/predict/drift`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lat, lon, time: time + ':00Z', hours: selectedHours }),
+    });
+    if (!r.ok) {
+      const err = await r.json();
+      throw new Error(err.detail || `HTTP ${r.status}`);
+    }
+    const data = await r.json();
+    currentTraj = data.trajectory;
+    renderDriftResults(data);
   } catch(e) {
-    setStatus(`Error: ${e.message}`, 'err');
+    document.getElementById('drift-status').innerHTML = `<span class="err">${e.message}</span>`;
   } finally {
-    document.getElementById('loading').classList.remove('visible');
+    btn.disabled = false;
   }
 }
 
-// ── Controls ──────────────────────────────────────────────────────────────────
-document.getElementById('time-slider').addEventListener('input', () => {
-  updateTimeDisplay();
-  scheduleFetch();
+function renderDriftResults(data) {
+  const traj = data.trajectory;
+  const last = traj[traj.length - 1];
+  const dist = haversineNm(traj[0].lat, traj[0].lon, last.lat, last.lon);
+
+  document.getElementById('drift-status').innerHTML =
+    `<span class="ok">${traj.length - 1}h predicted · net drift <b>${dist.toFixed(1)} NM</b></span>`;
+
+  if (data.warnings && data.warnings.length) {
+    const w = document.getElementById('drift-warning');
+    w.textContent = '⚠ ' + data.warnings.join(' ');
+    w.style.display = 'block';
+  }
+
+  const container = document.getElementById('drift-results');
+  container.innerHTML = '';
+  traj.forEach((p, i) => {
+    const row = document.createElement('div');
+    row.className = 'traj-row';
+    row.dataset.idx = i;
+    const label = i === 0 ? 'incident' : `+${p.hour}h`;
+    const kts = p.speed_ms != null ? (p.speed_ms*1.944).toFixed(2)+' kts' : '';
+    const noDataSpan = p.no_data ? '<span class="nodata">no data</span>' : '';
+    row.innerHTML = `
+      <span class="t">${label}</span>
+      <span class="pos">${p.lat.toFixed(3)}, ${p.lon.toFixed(3)}</span>
+      <span class="spd">${noDataSpan || kts}</span>
+    `;
+    row.addEventListener('click', () => {
+      map.panTo([p.lat, p.lon]);
+      document.querySelectorAll('.traj-row').forEach(r => r.classList.remove('highlight'));
+      row.classList.add('highlight');
+    });
+    container.appendChild(row);
+  });
+
+  drawDriftTrajectory(traj);
+}
+
+function haversineNm(lat1, lon1, lat2, lon2) {
+  const R = 3440.065;
+  const φ1 = lat1*Math.PI/180, φ2 = lat2*Math.PI/180;
+  const Δφ = (lat2-lat1)*Math.PI/180, Δλ = (lon2-lon1)*Math.PI/180;
+  const a = Math.sin(Δφ/2)**2 + Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
+  return R * 2 * Math.asin(Math.sqrt(a));
+}
+
+// ── Tab switching ─────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+
+    // Switching away from drift: stop picking mode
+    if (btn.dataset.tab !== 'drift' && picking) togglePicking();
+  });
 });
 
-document.querySelectorAll('.res-btn').forEach(btn => {
+// ── Hours selector ────────────────────────────────────────────────────────────
+document.querySelectorAll('#hours-buttons .ctrl-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    selectedHours = +btn.dataset.hours;
+    document.querySelectorAll('#hours-buttons .ctrl-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  });
+});
+
+// ── Resolution buttons ────────────────────────────────────────────────────────
+document.querySelectorAll('#res-buttons .ctrl-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     if (btn.disabled) return;
     currentRes = btn.dataset.res;
@@ -340,56 +542,63 @@ document.querySelectorAll('.res-btn').forEach(btn => {
   });
 });
 
-map.on('moveend zoomend', scheduleFetch);
-
-// ── Click to inspect ──────────────────────────────────────────────────────────
-map.on('click', e => {
-  if (!arrowData.length) return;
-
-  // Find nearest point within 30px
-  let best = null, bestDist = 30;
-  for (const pt of arrowData) {
-    const pp = map.latLngToContainerPoint([pt.lat, pt.lon]);
-    const dx = pp.x - e.containerPoint.x;
-    const dy = pp.y - e.containerPoint.y;
-    const d  = Math.sqrt(dx*dx + dy*dy);
-    if (d < bestDist) { bestDist = d; best = pt; }
-  }
-  if (!best) { closePopup(); return; }
-
-  const kts   = (best.speed_ms * 1.944).toFixed(2);
-  const dir16 = compassDir(best.direction_deg);
-
-  document.getElementById('popup-content').innerHTML = `
-    <div style="margin-bottom:8px;font-size:13px;color:#e6edf3">
-      ${compassArrow(best.direction_deg)} ${dir16} at <span class="val">${kts} kts</span>
-    </div>
-    <div>lat <span class="val">${best.lat.toFixed(4)}</span></div>
-    <div>lon <span class="val">${best.lon.toFixed(4)}</span></div>
-    <div>u   <span class="val">${best.u_ms.toFixed(3)} m/s</span></div>
-    <div>v   <span class="val">${best.v_ms.toFixed(3)} m/s</span></div>
-    <div>res <span class="val">${best.resolution}</span></div>
-    <div style="margin-top:8px;font-size:10px;color:#8b949e">${best.time.replace('T',' ').slice(0,16)} UTC</div>
-  `;
-  document.getElementById('info-popup').style.display = 'block';
+// ── Time slider ───────────────────────────────────────────────────────────────
+document.getElementById('time-slider').addEventListener('input', () => {
+  updateTimeDisplay(); scheduleFetch();
 });
 
-function closePopup() {
-  document.getElementById('info-popup').style.display = 'none';
-}
+// ── Map click ────────────────────────────────────────────────────────────────
+map.on('click', e => {
+  const activeTab = document.querySelector('.tab-btn.active').dataset.tab;
+
+  if (activeTab === 'drift' && picking) {
+    document.getElementById('d-lat').value = e.latlng.lat.toFixed(4);
+    document.getElementById('d-lon').value = e.latlng.lng.toFixed(4);
+    if (incidentMarker) map.removeLayer(incidentMarker);
+    incidentMarker = L.circleMarker(e.latlng, {
+      radius: 7, color: '#fff', weight: 2, fillColor: '#f85149', fillOpacity: 1,
+    }).addTo(map);
+    togglePicking();
+    return;
+  }
+
+  if (activeTab === 'currents' && arrowData.length) {
+    let best = null, bestDist = 30;
+    for (const pt of arrowData) {
+      const pp = map.latLngToContainerPoint([pt.lat, pt.lon]);
+      const d = Math.hypot(pp.x - e.containerPoint.x, pp.y - e.containerPoint.y);
+      if (d < bestDist) { bestDist = d; best = pt; }
+    }
+    if (!best) { closePopup(); return; }
+    const kts = (best.speed_ms * 1.944).toFixed(2);
+    document.getElementById('popup-content').innerHTML = `
+      <div style="margin-bottom:8px;font-size:13px;color:#e6edf3">
+        ${compassArrow(best.direction_deg)} ${compassDir(best.direction_deg)} at <span class="val">${kts} kts</span>
+      </div>
+      <div>lat <span class="val">${best.lat.toFixed(4)}</span></div>
+      <div>lon <span class="val">${best.lon.toFixed(4)}</span></div>
+      <div>u   <span class="val">${best.u_ms.toFixed(3)} m/s</span></div>
+      <div>v   <span class="val">${best.v_ms.toFixed(3)} m/s</span></div>
+      <div>res <span class="val">${best.resolution}</span></div>
+      <div style="margin-top:8px;font-size:10px;color:#8b949e">${best.time.slice(0,16).replace('T',' ')} UTC</div>
+    `;
+    document.getElementById('info-popup').style.display = 'block';
+  }
+});
+
+map.on('moveend zoomend', scheduleFetch);
+
+function closePopup() { document.getElementById('info-popup').style.display = 'none'; }
 
 function compassDir(deg) {
-  const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
-  return dirs[Math.round(deg / 22.5) % 16];
+  if (deg == null) return '—';
+  return ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'][Math.round(deg/22.5)%16];
 }
-
 function compassArrow(deg) {
-  // Unicode arrows for 8 directions
-  const arrows = ['↑','↗','→','↘','↓','↙','←','↖'];
-  return arrows[Math.round(deg / 45) % 8];
+  if (deg == null) return '';
+  return ['↑','↗','→','↘','↓','↙','←','↖'][Math.round(deg/45)%8];
 }
 
-// ── Init ──────────────────────────────────────────────────────────────────────
 loadStatus();
 </script>
 </body>

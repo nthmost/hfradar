@@ -13,13 +13,14 @@ Endpoints:
 import math
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import List, Optional
 
 import psycopg2
 import psycopg2.extras
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -38,7 +39,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
@@ -249,3 +250,117 @@ def currents_area(
     if not rows:
         raise HTTPException(404, "No data found in this area and time.")
     return [row_to_dict(r, resolution) for r in rows]
+
+
+# ── Drift prediction ───────────────────────────────────────────────────────────
+
+class DriftRequest(BaseModel):
+    lat: float
+    lon: float
+    time: str           # ISO 8601 UTC, e.g. "2026-04-10T14:00:00Z"
+    hours: int = 24     # prediction window
+    resolution: Optional[str] = None  # force a resolution; auto-selects finest if omitted
+
+
+def _nearest_current(cur, lat, lon, t):
+    """
+    Return (u, v, resolution, data_lat, data_lon) for the nearest valid grid point
+    to (lat, lon) at time t, trying resolutions finest → coarsest.
+    Returns (0, 0, None, lat, lon) if no data found.
+    """
+    window = timedelta(minutes=35)   # ±35 min around the requested hour
+    for res, table in RESOLUTION_TABLES:
+        cur.execute(
+            f"""
+            SELECT u, v, lat, lon FROM {table}
+            WHERE time BETWEEN %s AND %s
+            ORDER BY geom <-> ST_SetSRID(ST_MakePoint(%s, %s), 4326)
+            LIMIT 1
+            """,
+            (t - window, t + window, lon, lat),
+        )
+        row = cur.fetchone()
+        if row:
+            return float(row["u"]), float(row["v"]), res, float(row["lat"]), float(row["lon"])
+    return 0.0, 0.0, None, lat, lon
+
+
+@app.post("/predict/drift")
+@limiter.limit("10/minute")
+def predict_drift(request: Request, body: DriftRequest):
+    """
+    Dead-reckoning debris drift using archived HF radar surface currents.
+    Steps hourly from the incident location, advecting by the nearest
+    available surface current at each timestep.
+    """
+    if body.hours < 1 or body.hours > 120:
+        raise HTTPException(400, "hours must be between 1 and 120.")
+
+    try:
+        start = datetime.fromisoformat(body.time.replace("Z", "+00:00"))
+    except ValueError:
+        raise HTTPException(400, "Invalid time format. Use ISO 8601, e.g. 2026-04-10T14:00:00Z")
+
+    conn = get_db()
+    trajectory = []
+    cur_lat, cur_lon = body.lat, body.lon
+    warnings = []
+
+    try:
+        with conn.cursor() as cur:
+            trajectory.append({
+                "hour": 0,
+                "time": start.isoformat(),
+                "lat": round(cur_lat, 5),
+                "lon": round(cur_lon, 5),
+                "u_ms": None,
+                "v_ms": None,
+                "speed_ms": None,
+                "direction_deg": None,
+                "resolution": None,
+                "no_data": False,
+            })
+
+            for h in range(body.hours):
+                t = start + timedelta(hours=h)
+                u, v, res, data_lat, data_lon = _nearest_current(cur, cur_lat, cur_lon, t)
+
+                no_data = res is None
+                if no_data and h == 0:
+                    warnings.append("No HF radar data found near the incident location and time. "
+                                    "Check that the date is within the archive (Jan 2026–present) "
+                                    "and the location is on the US West Coast.")
+
+                # Euler step: u=east (m/s), v=north (m/s) → displacement in degrees
+                # 1 degree lat ≈ 111,000 m; 1 degree lon ≈ 111,000 * cos(lat) m
+                dt = 3600  # seconds
+                delta_lat = (v * dt) / 111_000
+                delta_lon  = (u * dt) / (111_000 * math.cos(math.radians(cur_lat)))
+
+                cur_lat += delta_lat
+                cur_lon += delta_lon
+
+                speed = math.sqrt(u**2 + v**2)
+                direction = math.degrees(math.atan2(u, v)) % 360
+
+                trajectory.append({
+                    "hour": h + 1,
+                    "time": (start + timedelta(hours=h + 1)).isoformat(),
+                    "lat": round(cur_lat, 5),
+                    "lon": round(cur_lon, 5),
+                    "u_ms": round(u, 4),
+                    "v_ms": round(v, 4),
+                    "speed_ms": round(speed, 4),
+                    "direction_deg": round(direction, 1),
+                    "resolution": res,
+                    "no_data": no_data,
+                })
+    finally:
+        conn.close()
+
+    return {
+        "incident": {"lat": body.lat, "lon": body.lon, "time": start.isoformat()},
+        "hours": body.hours,
+        "trajectory": trajectory,
+        "warnings": warnings,
+    }
